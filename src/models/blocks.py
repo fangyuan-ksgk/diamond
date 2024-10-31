@@ -39,16 +39,23 @@ class AdaGroupNorm(nn.Module):
         self.linear = nn.Linear(cond_channels, in_channels * 2)
 
     def forward(self, x: Tensor, cond: Tensor) -> Tensor:
+        """ 
+        c: in_channels
+        t*e: cond_channels
+        cond shape: (b, t*e)
+        x shape: (b, c, h, w)
+        """
         assert x.size(1) == self.in_channels
         x = F.group_norm(x, self.num_groups, eps=GN_EPS)
         scale, shift = self.linear(cond)[:, :, None, None].chunk(2, dim=1)
         return x * (1 + scale) + shift
 
 
-# Self Attention
+# Self Attention for 2D images 
+# language embedding (dim,) sliced into multiple heads, temporal attention between tokens 
+# image channels (channel, h * w) sliced into multiple heads, spatial attention between patches (still 2D matrix attention by flattening image)
 
-
-class SelfAttention2d(nn.Module):
+class SelfAttention2d(nn.Module): # 2D attention? Cost of this must be quadratic with # frames ... (!)
     def __init__(self, in_channels: int, head_dim: int = ATTN_HEAD_DIM) -> None:
         super().__init__()
         self.n_head = max(1, in_channels // head_dim)
@@ -60,10 +67,10 @@ class SelfAttention2d(nn.Module):
         nn.init.zeros_(self.out_proj.bias)
 
     def forward(self, x: Tensor) -> Tensor:
-        n, c, h, w = x.shape
+        n, c, h, w = x.shape # c = in_channels
         x = self.norm(x)
         qkv = self.qkv_proj(x)
-        qkv = qkv.view(n, self.n_head * 3, c // self.n_head, h * w).transpose(2, 3).contiguous()
+        qkv = qkv.view(n, self.n_head * 3, c // self.n_head, h * w).transpose(2, 3).contiguous() 
         q, k, v = [x for x in qkv.chunk(3, dim=1)]
         att = (q @ k.transpose(-2, -1)) / math.sqrt(k.size(-1))
         att = F.softmax(att, dim=-1)
@@ -170,7 +177,7 @@ class ResBlocks(nn.Module):
                 ResBlock(in_ch, out_ch, cond_channels, attn)
                 for (in_ch, out_ch) in zip(list_in_channels, list_out_channels)
             ]
-        )
+        ) # do we require some sort of 1-drift matching between list_in_channels and list_out_channels here?
 
     def forward(self, x: Tensor, cond: Tensor, to_cat: Optional[List[Tensor]] = None) -> Tensor:
         outputs = []
@@ -198,8 +205,8 @@ class UNet(nn.Module):
                 ResBlocks(
                     list_in_channels=[c1] + [c2] * (n - 1),
                     list_out_channels=[c2] * n,
-                    cond_channels=cond_channels,
-                    attn=attn_depths[i],
+                    cond_channels=cond_channels, # confused, why is there an extra channels number besides input and output?
+                    attn=attn_depths[i], # we have attention inside ?
                 )
             )
             u_blocks.append(

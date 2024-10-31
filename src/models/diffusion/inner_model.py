@@ -15,7 +15,7 @@ class InnerModelConfig:
     num_steps_conditioning: int # num_steps_conditioning = t
     cond_channels: int # cond_channels = e * t 
     depths: List[int] # ? what's the difference between this and the attn_depths?
-    channels: List[int] # ? I guess we use convolution here ... ?
+    channels: List[int] # ? I guess we use convolution here ... ? I suspect channels[0] = cond_channels ... (not sure?)
     attn_depths: List[bool] # ? what's the difference between this and depths?
     num_actions: Optional[int] = None # number of possible actions (vocabulary size)
 
@@ -49,8 +49,14 @@ class InnerModel(nn.Module):
         nn.init.zeros_(self.conv_out.weight)
 
     def forward(self, noisy_next_obs: Tensor, c_noise: Tensor, obs: Tensor, act: Tensor) -> Tensor:
-        cond = self.cond_proj(self.noise_emb(c_noise) + self.act_emb(act)) # (b, t*e) -> (b, t*e) | Adding noise to the action? Augmentation of sorts?
-        x = self.conv_in(torch.cat((obs, noisy_next_obs), dim=1)) # (b, (t+1)*c) -> (b, c) | We don't use transformer here? DiT, no? 
-        x, _, _ = self.unet(x, cond) # (b, c) -> (b, c)
+        """ 
+        action: (b, t)
+        c_noise: (b,)
+        noisy_next_obs: (b, c, h, w)
+        obs: (b, t * c, h, w)
+        """
+        cond = self.cond_proj(self.noise_emb(c_noise) + self.act_emb(act)) # (b, t*e = cond_channels)
+        x = self.conv_in(torch.cat((obs, noisy_next_obs), dim=1)) # (b, channels[0]) ? | how about DiT?  
+        x, _, _ = self.unet(x, cond) # 
         x = self.conv_out(F.silu(self.norm_out(x))) # (b, c) -> (b, c)
         return x
