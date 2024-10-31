@@ -32,11 +32,14 @@ class InnerModel(nn.Module):
             nn.Flatten(start_dim=1),  # (b, t, e) -> (b, t*e)
         )
         
+        # how is this not redundant ... ?
         self.cond_proj = nn.Sequential(
             nn.Linear(cfg.cond_channels, cfg.cond_channels),
             nn.SiLU(),
             nn.Linear(cfg.cond_channels, cfg.cond_channels),
         )
+        
+        # This guy mixes 'noisy next frame' with 'conditional frames' :: it only handles visual signals
         self.conv_in = Conv3x3((cfg.num_steps_conditioning + 1) * cfg.img_channels, cfg.channels[0])
 
         self.unet = UNet(cfg.cond_channels, cfg.depths, cfg.channels, cfg.attn_depths)
@@ -46,8 +49,8 @@ class InnerModel(nn.Module):
         nn.init.zeros_(self.conv_out.weight)
 
     def forward(self, noisy_next_obs: Tensor, c_noise: Tensor, obs: Tensor, act: Tensor) -> Tensor:
-        cond = self.cond_proj(self.noise_emb(c_noise) + self.act_emb(act))
-        x = self.conv_in(torch.cat((obs, noisy_next_obs), dim=1))
-        x, _, _ = self.unet(x, cond)
-        x = self.conv_out(F.silu(self.norm_out(x)))
+        cond = self.cond_proj(self.noise_emb(c_noise) + self.act_emb(act)) # (b, t*e) -> (b, t*e) | Adding noise to the action? Augmentation of sorts?
+        x = self.conv_in(torch.cat((obs, noisy_next_obs), dim=1)) # (b, (t+1)*c) -> (b, c) | We don't use transformer here? DiT, no? 
+        x, _, _ = self.unet(x, cond) # (b, c) -> (b, c)
+        x = self.conv_out(F.silu(self.norm_out(x))) # (b, c) -> (b, c)
         return x
