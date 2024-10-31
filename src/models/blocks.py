@@ -98,7 +98,7 @@ class FourierFeatures(nn.Module):
         return torch.cat([f.cos(), f.sin()], dim=-1)
 
 
-# [Down|Up]sampling
+# [Down|Up]sampling | Scale [up|down] spatial dimension by 2
 
 
 class Downsample(nn.Module):
