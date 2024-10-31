@@ -12,12 +12,12 @@ from ..blocks import Conv3x3, FourierFeatures, GroupNorm, UNet
 @dataclass
 class InnerModelConfig:
     img_channels: int
-    num_steps_conditioning: int
-    cond_channels: int
-    depths: List[int]
-    channels: List[int]
-    attn_depths: List[bool]
-    num_actions: Optional[int] = None
+    num_steps_conditioning: int # number of frames to perform conditional generation
+    cond_channels: int # this is action embedding channels number right?
+    depths: List[int] # ? what's the difference between this and the attn_depths?
+    channels: List[int] # ? I guess we use convolution here ... ?
+    attn_depths: List[bool] # ? what's the difference between this and depths?
+    num_actions: Optional[int] = None # uhh, you don't do 1-action->1-frame? 
 
 
 class InnerModel(nn.Module):
